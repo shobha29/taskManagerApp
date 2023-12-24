@@ -1,0 +1,16 @@
+export const icons = {
+  homeActive: require('./homeActive.png'),
+  homeInactive: require('./homeInactive.png'),
+  profileActive: require('./profileActive.png'),
+  profileInactive: require('./profileInactive.png'),
+  searchActive: require('./searchActive.png'),
+  searchInactive: require('./searchInactive.png'),
+  settingsActive: require('./settingsActive.png'),
+  settingsInactive: require('./settingsInactive.png'),
+  hamburger: require('./hamburger.png'),
+  back: require('./back.png'),
+  delete: require('./delete.png'),
+  edit: require('./edit.png'),
+  add: require('./add.png'),
+  close: require('./close.png'),
+};
