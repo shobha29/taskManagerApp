@@ -6,6 +6,7 @@ export const addUpdateTaskToDb = ({
   title = '',
   description = '',
   status = '',
+  timeStamp = '',
 }) => {
   let key;
   if (isEmpty(id)) {
@@ -18,6 +19,7 @@ export const addUpdateTaskToDb = ({
     title,
     description,
     status,
+    timeStamp,
   };
 
   database()

@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useState} from 'react';
+import React, {useCallback, useContext, useEffect, useState} from 'react';
 import {
   FlatList,
   Image,
@@ -9,18 +9,24 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import {shallowEqual, useDispatch, useSelector} from 'react-redux';
 import {useNavigation} from '@react-navigation/native';
-import database from '@react-native-firebase/database';
 import {isEmpty} from 'lodash';
 
 import {icons} from '../../asserts';
 import {Header} from '../../components';
-import {addUpdateTaskToDb, deleteTaskFromDb} from '../../utils/apiCaller';
 import {
   screenNameString,
   taskStatus,
   taskStatusString,
 } from '../../utils/constants';
+import {DeviceContext} from '../../utils/context';
+import {
+  addTaskAction,
+  deleteTaskAction,
+  fetchTaskList,
+  syncOfflineTask,
+} from '../../redux/taskSlice';
 
 import styles from './home.styles';
 
@@ -30,9 +36,9 @@ const initialState = {
   titleTask: '',
   descriptionTask: '',
   statusTask: '',
-  taskDataList: [],
   isUpdateForm: false,
   isOpenStatusDropDown: false,
+  timeStampTask: '',
 };
 
 const Home = () => {
@@ -43,29 +49,25 @@ const Home = () => {
       titleTask,
       descriptionTask,
       statusTask,
-      taskDataList,
       isUpdateForm,
       isOpenStatusDropDown,
+      timeStampTask,
     },
     setState,
   ] = useState(initialState);
   const navigation = useNavigation();
+  const dispatch = useDispatch();
+  const {isConnected} = useContext(DeviceContext);
+  const {taskDataList} = useSelector(rState => rState.task, shallowEqual);
 
   useEffect(() => {
-    const taskRef = database().ref('task');
-    const onLoadingListener = taskRef.on('value', snapshot => {
-      const data = Object.entries(snapshot.val()).map(([key, value]) => {
-        return {
-          id: key,
-          ...value,
-        };
-      });
-      setState(prev => ({...prev, taskDataList: data}));
-    });
-    return () => {
-      taskRef.off('value', onLoadingListener);
-    };
-  }, []);
+    console.log('isConnected---', isConnected);
+    if (isConnected) {
+      console.log('call sync');
+      dispatch(fetchTaskList());
+      dispatch(syncOfflineTask());
+    }
+  }, [isConnected]);
 
   const onPressMenu = () => {
     navigation.openDrawer();
@@ -87,8 +89,10 @@ const Home = () => {
       title: titleTask,
       description: descriptionTask,
       status: 'PENDING',
+      timeStamp: new Date().getTime(),
+      isConnected,
     };
-    addUpdateTaskToDb(payload);
+    dispatch(addTaskAction(payload));
     onCloseForm();
   };
   const onPressUpdate = item => {
@@ -98,6 +102,7 @@ const Home = () => {
       titleTask: item?.title,
       descriptionTask: item?.description,
       statusTask: item?.status,
+      timeStampTask: item?.timeStamp,
       isOpenForm: true,
       isUpdateForm: true,
     }));
@@ -109,16 +114,19 @@ const Home = () => {
       description: descriptionTask,
       id: idTask,
       status: statusTask,
+      timeStamp: timeStampTask,
+      isConnected,
     };
-    addUpdateTaskToDb(payload);
+    dispatch(addTaskAction(payload));
     onCloseForm();
   };
 
   const deleteTask = item => {
     const payload = {
       id: item?.id,
+      isConnected,
     };
-    deleteTaskFromDb(payload);
+    dispatch(deleteTaskAction(payload));
     onCloseForm();
   };
 
