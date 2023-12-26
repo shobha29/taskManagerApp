@@ -199,6 +199,22 @@ const styles = StyleSheet.create({
     color: colors.blue,
     fontWeight: '700',
   },
+  loadView: {
+    flex: 1,
+    backgroundColor: colors.modalFadedBg50,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loader: {
+    borderRadius: 10,
+    backgroundColor: colors.white,
+    padding: 25,
+  },
+  warningText: {
+    fontSize: normalizeFont(12),
+    fontStyle: 'italic',
+    color: colors.red,
+  },
 });
 
 export default styles;

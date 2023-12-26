@@ -1,5 +1,6 @@
 import React, {useCallback, useContext, useEffect, useState} from 'react';
 import {
+  ActivityIndicator,
   FlatList,
   Image,
   Modal,
@@ -26,9 +27,10 @@ import {
   deleteTaskAction,
   fetchTaskList,
   syncOfflineTask,
-} from '../../redux/taskSlice';
+} from '../../redux/reducers';
 
 import styles from './home.styles';
+import colors from '../../utils/colors';
 
 const initialState = {
   isOpenForm: false,
@@ -58,12 +60,13 @@ const Home = () => {
   const navigation = useNavigation();
   const dispatch = useDispatch();
   const {isConnected} = useContext(DeviceContext);
-  const {taskDataList} = useSelector(rState => rState.task, shallowEqual);
+  const {taskDataList, loading} = useSelector(
+    rState => rState.task,
+    shallowEqual,
+  );
 
   useEffect(() => {
-    console.log('isConnected---', isConnected);
     if (isConnected) {
-      console.log('call sync');
       dispatch(fetchTaskList());
       dispatch(syncOfflineTask());
     }
@@ -86,8 +89,8 @@ const Home = () => {
 
   const createTask = async () => {
     const payload = {
-      title: titleTask,
-      description: descriptionTask,
+      title: titleTask.trim(),
+      description: descriptionTask.trim(),
       status: 'PENDING',
       timeStamp: new Date().getTime(),
       isConnected,
@@ -95,6 +98,7 @@ const Home = () => {
     dispatch(addTaskAction(payload));
     onCloseForm();
   };
+
   const onPressUpdate = item => {
     setState(prev => ({
       ...prev,
@@ -108,10 +112,10 @@ const Home = () => {
     }));
   };
 
-  const updateTask = () => {
+  const updateTask = useCallback(() => {
     const payload = {
-      title: titleTask,
-      description: descriptionTask,
+      title: titleTask.trim(),
+      description: descriptionTask.trim(),
       id: idTask,
       status: statusTask,
       timeStamp: timeStampTask,
@@ -119,7 +123,15 @@ const Home = () => {
     };
     dispatch(addTaskAction(payload));
     onCloseForm();
-  };
+  }, [
+    descriptionTask,
+    dispatch,
+    idTask,
+    isConnected,
+    statusTask,
+    timeStampTask,
+    titleTask,
+  ]);
 
   const deleteTask = item => {
     const payload = {
@@ -173,63 +185,50 @@ const Home = () => {
     );
   };
 
-  const renderTaskDropDown = ({item}) => {
-    const isSelected = item === statusTask;
-    const isPendingStatus = item === taskStatus.PENDING;
+  const renderTaskDropDown = useCallback(
+    ({item}) => {
+      const isSelected = item === statusTask;
+      const isPendingStatus = item === taskStatus.PENDING;
 
-    return (
-      <>
-        <TouchableOpacity
-          style={[
-            styles.dropDownItem,
-            isSelected && styles.selectedStatus,
-            isPendingStatus
-              ? styles.topBorderRadius
-              : styles.bottomBorderRadius,
-          ]}
-          onPress={() => setState(prev => ({...prev, statusTask: item}))}>
-          <Text
+      return (
+        <>
+          <TouchableOpacity
             style={[
-              styles.selectedText,
-              isSelected && styles.selectedStatusText,
-            ]}>
-            {taskStatusString[item]}
-          </Text>
-        </TouchableOpacity>
-      </>
-    );
-  };
+              styles.dropDownItem,
+              isSelected && styles.selectedStatus,
+              isPendingStatus
+                ? styles.topBorderRadius
+                : styles.bottomBorderRadius,
+            ]}
+            onPress={() => setState(prev => ({...prev, statusTask: item}))}>
+            <Text
+              style={[
+                styles.selectedText,
+                isSelected && styles.selectedStatusText,
+              ]}>
+              {taskStatusString[item]}
+            </Text>
+          </TouchableOpacity>
+        </>
+      );
+    },
+    [statusTask],
+  );
 
-  const dropDown = () => {
-    return (
+  const dropDown = useCallback(
+    () => (
       <View style={styles.dropDownContainer}>
         <FlatList
           data={Object.keys(taskStatus)}
           renderItem={renderTaskDropDown}
         />
       </View>
-    );
-  };
+    ),
+    [renderTaskDropDown],
+  );
 
-  return (
-    <View style={styles.mainContainer}>
-      <Header
-        title={screenNameString.HOME}
-        leftIcon={icons.hamburger}
-        onPressLeftIcon={onPressMenu}
-      />
-      <FlatList
-        data={taskDataList}
-        renderItem={renderCardItem}
-        keyExtractor={keyExtractor}
-        ItemSeparatorComponent={itemSeparatorComponent}
-        contentContainerStyle={styles.taskContainer}
-      />
-      <TouchableOpacity
-        style={styles.addBtn}
-        onPress={() => setState(prev => ({...prev, isOpenForm: true}))}>
-        <Image source={icons.add} style={styles.plusIcon} />
-      </TouchableOpacity>
+  const renderTaskForm = useCallback(
+    () => (
       <Modal
         visible={isOpenForm}
         transparent={true}
@@ -320,6 +319,12 @@ const Home = () => {
               )}
             </ScrollView>
 
+            {isEmpty(idTask) && isUpdateForm && (
+              <Text style={styles.warningText}>
+                {'**This is offline log and cannot be updated.'}
+              </Text>
+            )}
+
             <TouchableOpacity
               style={styles.addTaskBtn}
               disabled={getBtnDisable()}
@@ -335,6 +340,55 @@ const Home = () => {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+    ),
+    [
+      createTask,
+      descriptionTask,
+      dropDown,
+      getBtnDisable,
+      idTask,
+      isOpenForm,
+      isOpenStatusDropDown,
+      isUpdateForm,
+      statusTask,
+      titleTask,
+      updateTask,
+    ],
+  );
+
+  const renderLoader = useCallback(() => {
+    (loading?.fetchList || loading?.taskDelete || loading?.taskAdd) && (
+      <Modal transparent={true} visible={true}>
+        <View style={styles.loadView}>
+          <View style={styles.loader}>
+            <ActivityIndicator size="large" color={colors.modalBg} />
+          </View>
+        </View>
+      </Modal>
+    );
+  }, [loading?.fetchList, loading?.taskAdd, loading?.taskDelete]);
+
+  return (
+    <View style={styles.mainContainer}>
+      <Header
+        title={screenNameString.HOME}
+        leftIcon={icons.hamburger}
+        onPressLeftIcon={onPressMenu}
+      />
+      <FlatList
+        data={taskDataList}
+        renderItem={renderCardItem}
+        keyExtractor={keyExtractor}
+        ItemSeparatorComponent={itemSeparatorComponent}
+        contentContainerStyle={styles.taskContainer}
+      />
+      <TouchableOpacity
+        style={styles.addBtn}
+        onPress={() => setState(prev => ({...prev, isOpenForm: true}))}>
+        <Image source={icons.add} style={styles.plusIcon} />
+      </TouchableOpacity>
+      {renderTaskForm()}
+      {renderLoader()}
     </View>
   );
 };

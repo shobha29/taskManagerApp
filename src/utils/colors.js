@@ -17,6 +17,7 @@ const colors = {
   blueLightBg: '#f5faff',
   blueTwenty: '#D1D5E9',
   modalBg: 'rgba(0,0,0,0.7)',
+  modalFadedBg50: 'rgba(0, 0, 0, .5)',
   greyBack: '#C4C4C4',
 };
 
