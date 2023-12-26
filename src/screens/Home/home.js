@@ -1,5 +1,6 @@
-import React, {useCallback, useEffect, useState} from 'react';
+import React, {useCallback, useContext, useEffect, useState} from 'react';
 import {
+  ActivityIndicator,
   FlatList,
   Image,
   Modal,
@@ -9,20 +10,27 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import {shallowEqual, useDispatch, useSelector} from 'react-redux';
 import {useNavigation} from '@react-navigation/native';
-import database from '@react-native-firebase/database';
 import {isEmpty} from 'lodash';
 
 import {icons} from '../../asserts';
 import {Header} from '../../components';
-import {addUpdateTaskToDb, deleteTaskFromDb} from '../../utils/apiCaller';
 import {
   screenNameString,
   taskStatus,
   taskStatusString,
 } from '../../utils/constants';
+import {DeviceContext} from '../../utils/context';
+import {
+  addTaskAction,
+  deleteTaskAction,
+  fetchTaskList,
+  syncOfflineTask,
+} from '../../redux/reducers';
 
 import styles from './home.styles';
+import colors from '../../utils/colors';
 
 const initialState = {
   isOpenForm: false,
@@ -30,9 +38,9 @@ const initialState = {
   titleTask: '',
   descriptionTask: '',
   statusTask: '',
-  taskDataList: [],
   isUpdateForm: false,
   isOpenStatusDropDown: false,
+  timeStampTask: '',
 };
 
 const Home = () => {
@@ -43,29 +51,26 @@ const Home = () => {
       titleTask,
       descriptionTask,
       statusTask,
-      taskDataList,
       isUpdateForm,
       isOpenStatusDropDown,
+      timeStampTask,
     },
     setState,
   ] = useState(initialState);
   const navigation = useNavigation();
+  const dispatch = useDispatch();
+  const {isConnected} = useContext(DeviceContext);
+  const {taskDataList, loading} = useSelector(
+    rState => rState.task,
+    shallowEqual,
+  );
 
   useEffect(() => {
-    const taskRef = database().ref('task');
-    const onLoadingListener = taskRef.on('value', snapshot => {
-      const data = Object.entries(snapshot.val()).map(([key, value]) => {
-        return {
-          id: key,
-          ...value,
-        };
-      });
-      setState(prev => ({...prev, taskDataList: data}));
-    });
-    return () => {
-      taskRef.off('value', onLoadingListener);
-    };
-  }, []);
+    if (isConnected) {
+      dispatch(fetchTaskList());
+      dispatch(syncOfflineTask());
+    }
+  }, [isConnected]);
 
   const onPressMenu = () => {
     navigation.openDrawer();
@@ -84,13 +89,16 @@ const Home = () => {
 
   const createTask = async () => {
     const payload = {
-      title: titleTask,
-      description: descriptionTask,
+      title: titleTask.trim(),
+      description: descriptionTask.trim(),
       status: 'PENDING',
+      timeStamp: new Date().getTime(),
+      isConnected,
     };
-    addUpdateTaskToDb(payload);
+    dispatch(addTaskAction(payload));
     onCloseForm();
   };
+
   const onPressUpdate = item => {
     setState(prev => ({
       ...prev,
@@ -98,27 +106,39 @@ const Home = () => {
       titleTask: item?.title,
       descriptionTask: item?.description,
       statusTask: item?.status,
+      timeStampTask: item?.timeStamp,
       isOpenForm: true,
       isUpdateForm: true,
     }));
   };
 
-  const updateTask = () => {
+  const updateTask = useCallback(() => {
     const payload = {
-      title: titleTask,
-      description: descriptionTask,
+      title: titleTask.trim(),
+      description: descriptionTask.trim(),
       id: idTask,
       status: statusTask,
+      timeStamp: timeStampTask,
+      isConnected,
     };
-    addUpdateTaskToDb(payload);
+    dispatch(addTaskAction(payload));
     onCloseForm();
-  };
+  }, [
+    descriptionTask,
+    dispatch,
+    idTask,
+    isConnected,
+    statusTask,
+    timeStampTask,
+    titleTask,
+  ]);
 
   const deleteTask = item => {
     const payload = {
       id: item?.id,
+      isConnected,
     };
-    deleteTaskFromDb(payload);
+    dispatch(deleteTaskAction(payload));
     onCloseForm();
   };
 
@@ -165,63 +185,50 @@ const Home = () => {
     );
   };
 
-  const renderTaskDropDown = ({item}) => {
-    const isSelected = item === statusTask;
-    const isPendingStatus = item === taskStatus.PENDING;
+  const renderTaskDropDown = useCallback(
+    ({item}) => {
+      const isSelected = item === statusTask;
+      const isPendingStatus = item === taskStatus.PENDING;
 
-    return (
-      <>
-        <TouchableOpacity
-          style={[
-            styles.dropDownItem,
-            isSelected && styles.selectedStatus,
-            isPendingStatus
-              ? styles.topBorderRadius
-              : styles.bottomBorderRadius,
-          ]}
-          onPress={() => setState(prev => ({...prev, statusTask: item}))}>
-          <Text
+      return (
+        <>
+          <TouchableOpacity
             style={[
-              styles.selectedText,
-              isSelected && styles.selectedStatusText,
-            ]}>
-            {taskStatusString[item]}
-          </Text>
-        </TouchableOpacity>
-      </>
-    );
-  };
+              styles.dropDownItem,
+              isSelected && styles.selectedStatus,
+              isPendingStatus
+                ? styles.topBorderRadius
+                : styles.bottomBorderRadius,
+            ]}
+            onPress={() => setState(prev => ({...prev, statusTask: item}))}>
+            <Text
+              style={[
+                styles.selectedText,
+                isSelected && styles.selectedStatusText,
+              ]}>
+              {taskStatusString[item]}
+            </Text>
+          </TouchableOpacity>
+        </>
+      );
+    },
+    [statusTask],
+  );
 
-  const dropDown = () => {
-    return (
+  const dropDown = useCallback(
+    () => (
       <View style={styles.dropDownContainer}>
         <FlatList
           data={Object.keys(taskStatus)}
           renderItem={renderTaskDropDown}
         />
       </View>
-    );
-  };
+    ),
+    [renderTaskDropDown],
+  );
 
-  return (
-    <View style={styles.mainContainer}>
-      <Header
-        title={screenNameString.HOME}
-        leftIcon={icons.hamburger}
-        onPressLeftIcon={onPressMenu}
-      />
-      <FlatList
-        data={taskDataList}
-        renderItem={renderCardItem}
-        keyExtractor={keyExtractor}
-        ItemSeparatorComponent={itemSeparatorComponent}
-        contentContainerStyle={styles.taskContainer}
-      />
-      <TouchableOpacity
-        style={styles.addBtn}
-        onPress={() => setState(prev => ({...prev, isOpenForm: true}))}>
-        <Image source={icons.add} style={styles.plusIcon} />
-      </TouchableOpacity>
+  const renderTaskForm = useCallback(
+    () => (
       <Modal
         visible={isOpenForm}
         transparent={true}
@@ -312,6 +319,12 @@ const Home = () => {
               )}
             </ScrollView>
 
+            {isEmpty(idTask) && isUpdateForm && (
+              <Text style={styles.warningText}>
+                {'**This is offline log and cannot be updated.'}
+              </Text>
+            )}
+
             <TouchableOpacity
               style={styles.addTaskBtn}
               disabled={getBtnDisable()}
@@ -327,6 +340,55 @@ const Home = () => {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+    ),
+    [
+      createTask,
+      descriptionTask,
+      dropDown,
+      getBtnDisable,
+      idTask,
+      isOpenForm,
+      isOpenStatusDropDown,
+      isUpdateForm,
+      statusTask,
+      titleTask,
+      updateTask,
+    ],
+  );
+
+  const renderLoader = useCallback(() => {
+    (loading?.fetchList || loading?.taskDelete || loading?.taskAdd) && (
+      <Modal transparent={true} visible={true}>
+        <View style={styles.loadView}>
+          <View style={styles.loader}>
+            <ActivityIndicator size="large" color={colors.modalBg} />
+          </View>
+        </View>
+      </Modal>
+    );
+  }, [loading?.fetchList, loading?.taskAdd, loading?.taskDelete]);
+
+  return (
+    <View style={styles.mainContainer}>
+      <Header
+        title={screenNameString.HOME}
+        leftIcon={icons.hamburger}
+        onPressLeftIcon={onPressMenu}
+      />
+      <FlatList
+        data={taskDataList}
+        renderItem={renderCardItem}
+        keyExtractor={keyExtractor}
+        ItemSeparatorComponent={itemSeparatorComponent}
+        contentContainerStyle={styles.taskContainer}
+      />
+      <TouchableOpacity
+        style={styles.addBtn}
+        onPress={() => setState(prev => ({...prev, isOpenForm: true}))}>
+        <Image source={icons.add} style={styles.plusIcon} />
+      </TouchableOpacity>
+      {renderTaskForm()}
+      {renderLoader()}
     </View>
   );
 };
