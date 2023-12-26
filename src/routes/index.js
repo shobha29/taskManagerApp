@@ -1,9 +1,10 @@
 import React, {useEffect, useState} from 'react';
 import {NavigationContainer} from '@react-navigation/native';
+import NetInfo from '@react-native-community/netinfo';
 
 import {DeviceContext} from '../utils/context';
+import {syncOfflineTask} from '../redux/reducers';
 import DrawerNavigator from './drawerNavigator';
-import NetInfo from '@react-native-community/netinfo';
 
 const Route = () => {
   const [isConnected, setIsConnected] = useState(true);
@@ -12,6 +13,7 @@ const Route = () => {
     const unsubscribeNetInfo = NetInfo.addEventListener(val => {
       setIsConnected(val.isConnected);
     });
+    syncOfflineTask();
     return () => {
       unsubscribeNetInfo();
     };
